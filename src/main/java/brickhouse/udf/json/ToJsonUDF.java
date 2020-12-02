@@ -29,18 +29,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.BinaryObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.BooleanObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.ByteObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.DoubleObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.FloatObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.IntObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.LongObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.ShortObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.StringObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.TimestampObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.WritableConstantBooleanObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.*;
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.JsonGenerator;
@@ -49,11 +38,15 @@ import org.joda.time.format.ISODateTimeFormat;
 
 import java.io.IOException;
 import java.io.StringWriter;
+import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Date;
 
 /**
  * Generate a JSON string from an arbitrary Hive structure.
@@ -379,6 +372,80 @@ public class ToJsonUDF extends GenericUDF {
         }
     }
 
+    private class DateInspectorHandle implements InspectorHandle {
+        private DateObjectInspector dateInspector;
+        private DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+
+        public DateInspectorHandle(DateObjectInspector insp) {
+            dateInspector = insp;
+        }
+
+        @Override
+        public void generateJson(JsonGenerator gen, Object obj) throws JsonGenerationException, IOException {
+            if (obj == null) {
+                gen.writeNull();
+            } else {
+                Date date = dateInspector.getPrimitiveJavaObject(obj);
+                String dateStr = dateFormat.format(date);
+                gen.writeString(dateStr);
+            }
+        }
+    }
+
+    private class DecimalInspectorHandle implements InspectorHandle {
+        private HiveDecimalObjectInspector decimalInspector;
+
+        public DecimalInspectorHandle(HiveDecimalObjectInspector insp) {
+            decimalInspector = insp;
+        }
+
+        @Override
+        public void generateJson(JsonGenerator gen, Object obj) throws JsonGenerationException, IOException {
+            if (obj == null) {
+                gen.writeNull();
+            } else {
+                BigDecimal num = decimalInspector.getPrimitiveJavaObject(obj).bigDecimalValue();
+                gen.writeNumber(num);
+            }
+        }
+    }
+
+    private class VarcharInspectorHandle implements InspectorHandle {
+        private HiveVarcharObjectInspector varcharInspector;
+
+        public VarcharInspectorHandle(HiveVarcharObjectInspector insp) {
+            varcharInspector = insp;
+        }
+
+        @Override
+        public void generateJson(JsonGenerator gen, Object obj) throws JsonGenerationException, IOException {
+            if (obj == null) {
+                gen.writeNull();
+            } else {
+                String str = varcharInspector.getPrimitiveJavaObject(obj).getValue();
+                gen.writeString(str);
+            }
+        }
+    }
+
+    private class CharInspectorHandle implements InspectorHandle {
+        private HiveCharObjectInspector charInspector;
+
+        public CharInspectorHandle(HiveCharObjectInspector insp) {
+            charInspector = insp;
+        }
+
+        @Override
+        public void generateJson(JsonGenerator gen, Object obj) throws JsonGenerationException, IOException {
+            if (obj == null) {
+                gen.writeNull();
+            } else {
+                String str = charInspector.getPrimitiveJavaObject(obj).getValue();
+                gen.writeString(str);
+            }
+        }
+    }
+
 
     private InspectorHandle GenerateInspectorHandle(ObjectInspector insp) throws UDFArgumentException {
         Category cat = insp.getCategory();
@@ -411,6 +478,14 @@ public class ToJsonUDF extends GenericUDF {
                 return new BinaryInspectorHandle((BinaryObjectInspector) primInsp);
             } else if (primCat == PrimitiveCategory.TIMESTAMP) {
                 return new TimestampInspectorHandle((TimestampObjectInspector) primInsp);
+            } else if (primCat == PrimitiveCategory.DATE) {
+                return new DateInspectorHandle((DateObjectInspector) primInsp);
+            } else if (primCat == PrimitiveCategory.DECIMAL) {
+                return new DecimalInspectorHandle((HiveDecimalObjectInspector) primInsp);
+            } else if (primCat == PrimitiveCategory.VARCHAR) {
+                return new VarcharInspectorHandle((HiveVarcharObjectInspector) primInsp);
+            } else if (primCat == PrimitiveCategory.CHAR) {
+                return new CharInspectorHandle((HiveCharObjectInspector) primInsp);
             }
 
 
