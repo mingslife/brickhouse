@@ -21,7 +21,8 @@ public class HashMD5UDF extends UDF {
 
 
     public Long evaluate(String str) {
-        HashCode hc = hash.hashUnencodedChars(str);
+        HashCode hc = hash.hashString(str);
+        hash.hashString(str);
 
         return hc.asLong();
     }
